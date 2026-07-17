@@ -1,0 +1,61 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "internal-sites-template",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-10-08",
+	"compatibility_flags": ["nodejs_compat"],
+
+	// Enable workers.dev subdomain for initial deploy.
+	// Set to false and add routes when attaching a custom domain.
+	"workers_dev": true,
+
+	// Smart Placement - run close to your back-end services
+	"placement": {
+		"mode": "smart"
+	},
+
+	// Observability - enable logging
+	"observability": {
+		"enabled": true
+	},
+
+	// Workers for Platforms dispatch namespace.
+	// Each deployed internal site becomes a Worker in this namespace.
+	"dispatch_namespaces": [
+		{
+			"binding": "dispatcher",
+			"namespace": "internal-sites",
+			"remote": true
+		}
+	],
+
+	// D1 database for site metadata and deployment history.
+	// Auto-provisioned during Deploy to Cloudflare.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "internal-sites-platform",
+			"database_id": "00000000-0000-0000-0000-000000000000"
+		}
+	],
+
+	// Environment variables
+	"vars": {
+		// Dispatch namespace name - must match the namespace above
+		"DISPATCH_NAMESPACE_NAME": "internal-sites",
+		// Your company's internal domain (e.g. "internal-company.com")
+		"SITE_DOMAIN": "internal-company.com",
+		// Path where the deploy UI is served
+		"DEPLOY_PATH": "/deploy",
+		// Set to "true" ONLY for local development without Cloudflare Access
+		"DISABLE_ACCESS_IDENTITY_CHECK": "false"
+	},
+
+	// Routes for custom domain (uncomment and configure after attaching your domain):
+	// "routes": [
+	//   { "pattern": "internal-company.com/deploy*", "zone_name": "internal-company.com" },
+	//   { "pattern": "*.internal-company.com/*", "zone_name": "internal-company.com" }
+	// ],
+
+	"upload_source_maps": true
+}

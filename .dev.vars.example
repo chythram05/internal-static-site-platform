@@ -1,0 +1,26 @@
+# Internal Sites Platform - Secrets
+# Copy this file to .dev.vars for local development.
+#
+# ─── Required ────────────────────────────────────────────────────────────────
+#
+# DISPATCH_NAMESPACE_API_TOKEN
+#
+#   A Cloudflare API token that lets the platform deploy Workers into the
+#   dispatch namespace on behalf of employees.
+#
+#   Create one at:
+#     https://dash.cloudflare.com/profile/api-tokens
+#
+#   Select "Create Custom Token" and grant:
+#     Account | Workers Scripts | Edit
+#
+#   Scope it to your account only. Do not grant broader permissions.
+#
+DISPATCH_NAMESPACE_API_TOKEN=your-token-here
+
+# ─── Auto-detected ──────────────────────────────────────────────────────────
+#
+# ACCOUNT_ID is auto-detected by the setup script during Deploy to Cloudflare.
+# For local development, set it to your Cloudflare account ID.
+#
+# ACCOUNT_ID=your-account-id-here

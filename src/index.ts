@@ -1,0 +1,423 @@
+/**
+ * Internal Sites Platform -- main entry point.
+ *
+ * A Hono application that serves the deploy UI, admin dashboard,
+ * deploy API, and dispatches requests to user-deployed static sites
+ * via Workers for Platforms.
+ */
+
+import { Hono } from "hono";
+
+import { requireAccessIdentity } from "./access";
+import { normalizeSlug, parseStaticSiteUpload } from "./assets";
+import {
+	CreateDeployment,
+	CreateSite,
+	DeleteSite,
+	FetchTable,
+	GetSiteBySlug,
+	HasSitesTable,
+	Initialize,
+	UpdateSite,
+} from "./db";
+import type { Env } from "./env";
+import { BuildTable } from "./render";
+import {
+	DeleteScriptInDispatchNamespace,
+	GetScriptsInDispatchNamespace,
+	PutStaticSiteInDispatchNamespace,
+} from "./resource";
+import type { Deployment, Site } from "./types";
+import { renderDeployPage, renderNotFound, renderShell } from "./ui";
+
+// ── App ──────────────────────────────────────────────────────────────────────
+
+const app = new Hono<{ Bindings: Env; Variables: { db: D1Database } }>();
+
+// ── Database auto-init ───────────────────────────────────────────────────────
+
+/**
+ * Ensure the database schema exists. Runs a lightweight check on
+ * every request (single SELECT on sqlite_master) and only creates
+ * tables when they are missing.
+ */
+async function autoInitializeDatabase(db: D1Database): Promise<void> {
+	if (!(await HasSitesTable(db))) {
+		await Initialize(db);
+	}
+}
+
+// ── Middleware ────────────────────────────────────────────────────────────────
+
+app.use("*", async (c, next) => {
+	c.set("db", c.env.DB);
+	await autoInitializeDatabase(c.var.db);
+	await next();
+});
+
+// ── Routes ───────────────────────────────────────────────────────────────────
+
+app.get("/favicon.ico", () => new Response(null, { status: 204 }));
+
+app.get("/", (c) => c.redirect(deployPath(c.env)));
+
+// Deploy page
+app.get("/deploy", (c) => {
+	const identity = requireAccessIdentity(c.req.raw, c.env);
+	if (identity instanceof Response) return identity;
+
+	return c.html(
+		renderDeployPage({
+			siteDomain: siteDomain(c.env),
+			deployPath: deployPath(c.env),
+		}),
+	);
+});
+
+// Admin dashboard
+app.get("/admin", async (c) => {
+	const identity = requireAccessIdentity(c.req.raw, c.env);
+	if (identity instanceof Response) return identity;
+
+	let body = `<section class="panel">
+		<p class="eyebrow">Admin</p>
+		<h1>Internal Sites</h1>
+		<p class="lede">Signed in as ${escapeHtml(identity.email)}</p>`;
+
+	try {
+		body +=
+			'<h2>Sites</h2>' +
+			BuildTable("sites", await FetchTable(c.var.db, "sites"));
+		body +=
+			'<h2>Deployments</h2>' +
+			BuildTable("deployments", await FetchTable(c.var.db, "deployments"));
+	} catch (error) {
+		body += `<p>Could not load admin data: ${escapeHtml(errorMessage(error))}</p>`;
+	}
+
+	try {
+		const scripts = await GetScriptsInDispatchNamespace(c.env);
+		body +=
+			"<h2>Dispatch namespace</h2>" +
+			BuildTable(c.env.DISPATCH_NAMESPACE_NAME, scripts);
+	} catch (error) {
+		body += `<p>Could not load dispatch namespace: ${escapeHtml(errorMessage(error))}</p>`;
+	}
+
+	body += "</section>";
+
+	return c.html(
+		renderShell(body, {
+			title: "Internal Sites Admin",
+			siteDomain: siteDomain(c.env),
+			deployPath: deployPath(c.env),
+		}),
+	);
+});
+
+// ── Deploy API ───────────────────────────────────────────────────────────────
+
+app.post("/api/sites/deploy", async (c) => {
+	const identity = requireAccessIdentity(c.req.raw, c.env);
+	if (identity instanceof Response) return identity;
+
+	try {
+		const upload = await parseStaticSiteUpload(c.req.raw);
+		const existingSite = await GetSiteBySlug(c.var.db, upload.slug);
+		const now = new Date().toISOString();
+		const site =
+			existingSite ||
+			buildSite(upload.name, upload.slug, identity.email, now);
+
+		// Prevent slug takeover
+		if (existingSite && existingSite.owner_email !== identity.email) {
+			return c.json(
+				{ error: "Site slug is already owned by another user" },
+				409,
+			);
+		}
+
+		if (!existingSite) {
+			await CreateSite(c.var.db, site);
+		}
+
+		const deploy = await PutStaticSiteInDispatchNamespace(
+			c.env,
+			upload.slug,
+			upload.assets,
+		);
+
+		const deployment: Deployment = {
+			id: deploy.deploymentId,
+			site_id: site.id,
+			status: "success",
+			file_count: deploy.fileCount,
+			total_bytes: deploy.totalBytes,
+			manifest_json: JSON.stringify(deploy.manifest),
+			created_at: now,
+			created_by_email: identity.email,
+		};
+
+		await CreateDeployment(c.var.db, deployment);
+		await UpdateSite(c.var.db, site.id, {
+			latest_deployment_id: deployment.id,
+			updated_at: now,
+		});
+
+		return c.json(
+			{
+				slug: upload.slug,
+				url: siteUrl(c.req.raw, c.env, upload.slug),
+				fileCount: deploy.fileCount,
+				totalBytes: deploy.totalBytes,
+				protectedByAccess: true,
+			},
+			201,
+		);
+	} catch (error) {
+		console.error("Deploy failed", error);
+		return c.json({ error: errorMessage(error) }, 400);
+	}
+});
+
+// ── Site info ────────────────────────────────────────────────────────────────
+
+app.get("/api/sites/:slug", async (c) => {
+	const identity = requireAccessIdentity(c.req.raw, c.env);
+	if (identity instanceof Response) return identity;
+
+	const slug = normalizeSlug(c.req.param("slug"));
+	const site = await GetSiteBySlug(c.var.db, slug);
+
+	if (!site) {
+		return c.json({ error: "Site not found" }, 404);
+	}
+
+	return c.json({
+		...site,
+		url: siteUrl(c.req.raw, c.env, site.slug),
+	});
+});
+
+// ── Delete site ──────────────────────────────────────────────────────────────
+
+app.delete("/api/sites/:slug", async (c) => {
+	const identity = requireAccessIdentity(c.req.raw, c.env);
+	if (identity instanceof Response) return identity;
+
+	const slug = normalizeSlug(c.req.param("slug"));
+	const site = await GetSiteBySlug(c.var.db, slug);
+
+	if (!site) {
+		return c.json({ error: "Site not found" }, 404);
+	}
+
+	if (site.owner_email !== identity.email) {
+		return c.json({ error: "Only the owner can delete this site" }, 403);
+	}
+
+	await DeleteScriptInDispatchNamespace(c.env, slug);
+	await DeleteSite(c.var.db, site.id);
+
+	return c.json({ deleted: true });
+});
+
+// ── Wildcard: dispatch to user site ──────────────────────────────────────────
+
+app.get("*", async (c) => {
+	const identity = requireAccessIdentity(c.req.raw, c.env);
+	if (identity instanceof Response) return identity;
+
+	const slug = slugFromRequest(c.req.raw, c.env);
+
+	if (!slug) {
+		return c.redirect(deployPath(c.env));
+	}
+
+	const site = await GetSiteBySlug(c.var.db, slug);
+
+	if (!site) {
+		return c.html(
+			renderNotFound(siteDomain(c.env), deployPath(c.env)),
+			404,
+		);
+	}
+
+	// Redirect /sites/slug to /sites/slug/ in demo mode
+	if (shouldRedirectDemoSiteRoot(c.req.raw, c.env, site.slug)) {
+		const url = new URL(c.req.url);
+		url.pathname = `${url.pathname}/`;
+		return c.redirect(url.toString(), 308);
+	}
+
+	try {
+		const worker = c.env.dispatcher.get(site.slug);
+		const response = await worker.fetch(
+			requestForSite(c.req.raw, c.env, site.slug),
+		);
+		return await responseForSite(c.req.raw, c.env, site.slug, response);
+	} catch (error) {
+		if (
+			error instanceof Error &&
+			error.message.startsWith("Worker not found")
+		) {
+			return c.html(
+				renderNotFound(siteDomain(c.env), deployPath(c.env)),
+				404,
+			);
+		}
+
+		console.error("Dispatch failed", error);
+		return c.text("Could not load internal site", 500);
+	}
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildSite(
+	name: string,
+	slug: string,
+	ownerEmail: string,
+	now: string,
+): Site {
+	return {
+		id: `site-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+		name,
+		slug,
+		owner_email: ownerEmail,
+		visibility: "company",
+		created_at: now,
+		updated_at: now,
+		latest_deployment_id: null,
+	};
+}
+
+/**
+ * Extract the site slug from the incoming request.
+ *
+ * In production: reads from the subdomain (e.g. "docs" from "docs.internal-company.com").
+ * In local dev: reads from the path (e.g. /sites/docs/...).
+ */
+function slugFromRequest(request: Request, env: Env): string | null {
+	const url = new URL(request.url);
+	const domain = siteDomain(env);
+
+	// Production: subdomain routing
+	if (url.hostname.endsWith(`.${domain}`)) {
+		return normalizeSlug(
+			url.hostname.slice(0, -(domain.length + 1)),
+		);
+	}
+
+	// Local dev: path-based routing
+	if (
+		env.DISABLE_ACCESS_IDENTITY_CHECK === "true" &&
+		url.pathname.startsWith("/sites/")
+	) {
+		return normalizeSlug(url.pathname.split("/")[2] || "");
+	}
+
+	return null;
+}
+
+function siteUrl(request: Request, env: Env, slug: string): string {
+	if (env.DISABLE_ACCESS_IDENTITY_CHECK === "true") {
+		const url = new URL(request.url);
+		return `${url.origin}/sites/${slug}/`;
+	}
+
+	return `https://${slug}.${siteDomain(env)}`;
+}
+
+function requestForSite(request: Request, env: Env, slug: string): Request {
+	if (env.DISABLE_ACCESS_IDENTITY_CHECK !== "true") {
+		return request;
+	}
+
+	const url = new URL(request.url);
+	const prefix = `/sites/${slug}`;
+
+	if (!url.pathname.startsWith(prefix)) {
+		return request;
+	}
+
+	url.pathname = url.pathname.slice(prefix.length) || "/";
+	return new Request(url.toString(), request);
+}
+
+async function responseForSite(
+	request: Request,
+	env: Env,
+	slug: string,
+	response: Response,
+): Promise<Response> {
+	if (env.DISABLE_ACCESS_IDENTITY_CHECK !== "true") {
+		return response;
+	}
+
+	const contentType = response.headers.get("content-type") || "";
+	if (!contentType.includes("text/html")) {
+		return response;
+	}
+
+	// Rewrite asset URLs in demo mode so relative paths work under /sites/slug/
+	const html = await response.text();
+	const rewrittenHtml = rewriteDemoAssetUrls(html, slug);
+	const headers = new Headers(response.headers);
+	headers.delete("content-length");
+
+	return new Response(rewrittenHtml, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	});
+}
+
+function rewriteDemoAssetUrls(html: string, slug: string): string {
+	const prefix = `/sites/${slug}`;
+
+	return html.replace(
+		/\b(href|src)=(['"])(\/(?!\/|sites\/|cdn-cgi\/|api\/)[^'"]*)\2/g,
+		(_match, attr, quote, path) => {
+			return `${attr}=${quote}${prefix}${path}${quote}`;
+		},
+	);
+}
+
+function shouldRedirectDemoSiteRoot(
+	request: Request,
+	env: Env,
+	slug: string,
+): boolean {
+	if (env.DISABLE_ACCESS_IDENTITY_CHECK !== "true") {
+		return false;
+	}
+
+	const url = new URL(request.url);
+	return url.pathname === `/sites/${slug}`;
+}
+
+function siteDomain(env: Env): string {
+	return env.SITE_DOMAIN || "internal-company.com";
+}
+
+function deployPath(env: Env): string {
+	return env.DEPLOY_PATH || "/deploy";
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : "Unknown error";
+}
+
+function escapeHtml(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+export default app;
