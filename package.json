@@ -22,7 +22,7 @@
 	},
 	"scripts": {
 		"build": "node scripts/setup.js",
-		"deploy": "node scripts/setup.js && wrangler deploy",
+		"deploy": "wrangler deploy && node scripts/setup.js --set-secrets",
 		"dev": "wrangler dev --remote",
 		"test": "vitest run"
 	},
