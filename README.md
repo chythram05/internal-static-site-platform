@@ -16,7 +16,7 @@ https://my-site.internal-company.com
 
 Every site requires company login via Cloudflare Access.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/internal-sites-template)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/chythram05/internal-static-site-platform)
 
 <!-- dash-content-start -->
 
