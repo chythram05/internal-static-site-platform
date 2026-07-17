@@ -152,7 +152,7 @@ npx wrangler deploy
 
 Create one Cloudflare Access policy for the deployed Worker:
 
-1. Go to [**Zero Trust > Access > Applications**](https://one.dash.cloudflare.com/?to=/:account/access/apps)
+1. Go to [**Zero Trust > Access > Applications**](https://dash.cloudflare.com/?to=/:account/one/access-controls/apps)
 2. Click **Add an application** > **Self-hosted**
 3. Set the application domain to your platform domain (e.g. `yourcompany.com` and `*.yourcompany.com`)
 4. Under **Policies**, create an Allow policy for your company users
