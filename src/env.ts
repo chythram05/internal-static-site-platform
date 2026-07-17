@@ -19,7 +19,7 @@ export interface Env {
 
 	// ── Variables ────────────────────────────────────────────────────────────
 
-	/** Cloudflare account ID (auto-set by setup script). */
+	/** Cloudflare account ID (written into wrangler.jsonc by setup script during build). */
 	ACCOUNT_ID: string;
 
 	/** Name of the dispatch namespace (must match wrangler.jsonc). */

@@ -120,6 +120,41 @@ function ensureDispatchNamespace(namespaceName) {
 	}
 }
 
+// ── wrangler.jsonc updater ────────────────────────────────────────────────────
+
+/**
+ * Write ACCOUNT_ID into wrangler.jsonc vars during the build step.
+ * This mirrors the official CF template pattern (updateWranglerConfig in
+ * setup-quick.js) so that `wrangler deploy` picks up ACCOUNT_ID as a
+ * regular env var -- no post-deploy `wrangler secret put` needed.
+ */
+function updateWranglerConfig(accountId) {
+	if (!accountId) return false;
+
+	const configPath = path.join(PROJECT_ROOT, "wrangler.jsonc");
+	if (!fs.existsSync(configPath)) {
+		log(yellow, "  wrangler.jsonc not found -- skipping config update.");
+		return false;
+	}
+
+	let content = fs.readFileSync(configPath, "utf-8");
+
+	// Replace the ACCOUNT_ID placeholder (or existing value) in vars
+	const updated = content.replace(
+		/"ACCOUNT_ID"\s*:\s*"[^"]*"/,
+		`"ACCOUNT_ID": "${accountId}"`,
+	);
+
+	if (updated === content) {
+		log(yellow, "  Could not find ACCOUNT_ID in wrangler.jsonc vars.");
+		return false;
+	}
+
+	fs.writeFileSync(configPath, updated, "utf-8");
+	log(green, "  Set ACCOUNT_ID in wrangler.jsonc.");
+	return true;
+}
+
 // ── .dev.vars ────────────────────────────────────────────────────────────────
 
 function writeDevVars(accountId, dispatchToken) {
@@ -191,18 +226,7 @@ function setWranglerSecrets() {
 		}
 	}
 
-	const accountId = getVar("ACCOUNT_ID");
-	if (accountId) {
-		try {
-			execSync(
-				`echo "${accountId}" | npx wrangler secret put ACCOUNT_ID`,
-				{ stdio: "pipe", cwd: PROJECT_ROOT },
-			);
-			log(green, "  Set ACCOUNT_ID secret.");
-		} catch (error) {
-			log(yellow, `  Could not set ACCOUNT_ID: ${error.message}`);
-		}
-	}
+	// ACCOUNT_ID is set as a var in wrangler.jsonc during build -- no secret needed.
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -226,11 +250,17 @@ function main() {
 	log(cyan, `    Namespace: ${namespaceName}`);
 	console.log("");
 
-	// 1. Create dispatch namespace
+	// 1. Write ACCOUNT_ID into wrangler.jsonc (so wrangler deploy picks it up)
+	if (accountId) {
+		updateWranglerConfig(accountId);
+	}
+	console.log("");
+
+	// 2. Create dispatch namespace
 	ensureDispatchNamespace(namespaceName);
 	console.log("");
 
-	// 2. Check token
+	// 3. Check token
 	if (dispatchToken) {
 		log(green, "  DISPATCH_NAMESPACE_API_TOKEN is set.");
 	} else {
@@ -258,10 +288,10 @@ function main() {
 		console.log("");
 	}
 
-	// 3. Write .dev.vars (used by wrangler for secrets)
+	// 4. Write .dev.vars (used by wrangler for local dev)
 	writeDevVars(accountId, dispatchToken);
 
-	// 4. Set secrets if --set-secrets flag is passed (runs after wrangler deploy)
+	// 5. Set secrets if --set-secrets flag is passed (runs after wrangler deploy)
 	if (process.argv.includes("--set-secrets")) {
 		console.log("");
 		setWranglerSecrets();
