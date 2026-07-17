@@ -4,11 +4,15 @@
  * A Hono application that serves the deploy UI, admin dashboard,
  * deploy API, and dispatches requests to user-deployed static sites
  * via Workers for Platforms.
+ *
+ * Routing mode is auto-detected:
+ *   - workers.dev / localhost: path-based routing (/sites/slug/)
+ *   - Custom domain: subdomain routing (slug.company.com)
  */
 
 import { Hono } from "hono";
 
-import { requireAccessIdentity } from "./access";
+import { isTestingMode, requireAccessIdentity } from "./access";
 import { normalizeSlug, parseStaticSiteUpload } from "./assets";
 import {
 	CreateDeployment,
@@ -170,7 +174,7 @@ app.post("/api/sites/deploy", async (c) => {
 				url: siteUrl(c.req.raw, c.env, upload.slug),
 				fileCount: deploy.fileCount,
 				totalBytes: deploy.totalBytes,
-				protectedByAccess: true,
+				protectedByAccess: !isTestingMode(c.req.raw, c.env),
 			},
 			201,
 		);
@@ -243,8 +247,8 @@ app.get("*", async (c) => {
 		);
 	}
 
-	// Redirect /sites/slug to /sites/slug/ in demo mode
-	if (shouldRedirectDemoSiteRoot(c.req.raw, c.env, site.slug)) {
+	// Redirect /sites/slug to /sites/slug/ in path-based mode
+	if (shouldRedirectPathBasedRoot(c.req.raw, c.env, site.slug)) {
 		const url = new URL(c.req.url);
 		url.pathname = `${url.pathname}/`;
 		return c.redirect(url.toString(), 308);
@@ -295,8 +299,11 @@ function buildSite(
 /**
  * Extract the site slug from the incoming request.
  *
- * In production: reads from the subdomain (e.g. "docs" from "docs.internal-company.com").
- * In local dev: reads from the path (e.g. /sites/docs/...).
+ * Production (custom domain): reads from the subdomain
+ *   e.g. "docs" from "docs.internal-company.com"
+ *
+ * Testing (workers.dev / localhost): reads from the path
+ *   e.g. "docs" from "/sites/docs/index.html"
  */
 function slugFromRequest(request: Request, env: Env): string | null {
 	const url = new URL(request.url);
@@ -309,19 +316,17 @@ function slugFromRequest(request: Request, env: Env): string | null {
 		);
 	}
 
-	// Local dev: path-based routing
-	if (
-		env.DISABLE_ACCESS_IDENTITY_CHECK === "true" &&
-		url.pathname.startsWith("/sites/")
-	) {
+	// Testing: path-based routing
+	if (isTestingMode(request, env) && url.pathname.startsWith("/sites/")) {
 		return normalizeSlug(url.pathname.split("/")[2] || "");
 	}
 
 	return null;
 }
 
+/** Generate the URL for a deployed site. */
 function siteUrl(request: Request, env: Env, slug: string): string {
-	if (env.DISABLE_ACCESS_IDENTITY_CHECK === "true") {
+	if (isTestingMode(request, env)) {
 		const url = new URL(request.url);
 		return `${url.origin}/sites/${slug}/`;
 	}
@@ -329,8 +334,9 @@ function siteUrl(request: Request, env: Env, slug: string): string {
 	return `https://${slug}.${siteDomain(env)}`;
 }
 
+/** Strip the /sites/slug prefix when dispatching in path-based mode. */
 function requestForSite(request: Request, env: Env, slug: string): Request {
-	if (env.DISABLE_ACCESS_IDENTITY_CHECK !== "true") {
+	if (!isTestingMode(request, env)) {
 		return request;
 	}
 
@@ -345,13 +351,14 @@ function requestForSite(request: Request, env: Env, slug: string): Request {
 	return new Request(url.toString(), request);
 }
 
+/** Rewrite asset URLs in path-based mode so relative paths resolve correctly. */
 async function responseForSite(
 	request: Request,
 	env: Env,
 	slug: string,
 	response: Response,
 ): Promise<Response> {
-	if (env.DISABLE_ACCESS_IDENTITY_CHECK !== "true") {
+	if (!isTestingMode(request, env)) {
 		return response;
 	}
 
@@ -360,9 +367,8 @@ async function responseForSite(
 		return response;
 	}
 
-	// Rewrite asset URLs in demo mode so relative paths work under /sites/slug/
 	const html = await response.text();
-	const rewrittenHtml = rewriteDemoAssetUrls(html, slug);
+	const rewrittenHtml = rewritePathBasedAssetUrls(html, slug);
 	const headers = new Headers(response.headers);
 	headers.delete("content-length");
 
@@ -373,7 +379,7 @@ async function responseForSite(
 	});
 }
 
-function rewriteDemoAssetUrls(html: string, slug: string): string {
+function rewritePathBasedAssetUrls(html: string, slug: string): string {
 	const prefix = `/sites/${slug}`;
 
 	return html.replace(
@@ -384,12 +390,13 @@ function rewriteDemoAssetUrls(html: string, slug: string): string {
 	);
 }
 
-function shouldRedirectDemoSiteRoot(
+/** Redirect /sites/slug to /sites/slug/ in path-based mode. */
+function shouldRedirectPathBasedRoot(
 	request: Request,
 	env: Env,
 	slug: string,
 ): boolean {
-	if (env.DISABLE_ACCESS_IDENTITY_CHECK !== "true") {
+	if (!isTestingMode(request, env)) {
 		return false;
 	}
 

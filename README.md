@@ -23,8 +23,9 @@ Every site requires company login via Cloudflare Access.
 ## Features
 
 - **Drag & drop deploy** -- Upload a folder or ZIP file from the browser and get a live URL instantly
-- **Protected by default** -- Every site sits behind Cloudflare Access. Employees must sign in with your company identity provider
-- **Subdomain routing** -- Each site gets its own subdomain: `site-name.internal-company.com`
+- **Works on workers.dev** -- Test immediately after deploy. Path-based routing works out of the box on `*.workers.dev`
+- **Protected by default** -- Once configured, every site sits behind Cloudflare Access. Employees must sign in with your company identity provider
+- **Subdomain routing** -- In production, each site gets its own subdomain: `site-name.internal-company.com`
 - **Deployment history** -- Tracks who deployed what and when, stored in D1
 - **Admin dashboard** -- View all sites, deployments, and dispatch namespace scripts at `/admin`
 - **Re-deploy in place** -- Upload to the same slug to update an existing site. Only the owner can overwrite
@@ -34,7 +35,7 @@ Every site requires company login via Cloudflare Access.
 
 This template uses three Cloudflare products together:
 
-1. **Workers for Platforms** -- Each deployed site becomes an isolated Worker in a dispatch namespace. The platform Worker routes subdomain requests to the correct site Worker
+1. **Workers for Platforms** -- Each deployed site becomes an isolated Worker in a dispatch namespace. The platform Worker routes requests to the correct site Worker
 2. **D1** -- Stores site metadata (name, slug, owner, timestamps) and deployment history
 3. **Cloudflare Access** -- Enforces company login on every request. The platform reads the `Cf-Access-Authenticated-User-Email` header to identify who is deploying
 
@@ -71,6 +72,19 @@ Platform Worker (this template)
 
 ---
 
+## Quick Start
+
+After clicking **Deploy to Cloudflare**, the platform works immediately on workers.dev:
+
+1. Open `https://your-worker.your-subdomain.workers.dev/deploy`
+2. Upload a folder or ZIP containing an `index.html`
+3. Click **Deploy site**
+4. The generated URL uses path-based routing: `https://your-worker.workers.dev/sites/slug/`
+
+This is testing mode. For production, follow the full setup below to get subdomain routing and Access protection.
+
+---
+
 ## Set Up
 
 ### 1. Deploy this app
@@ -102,59 +116,65 @@ Before deploying sites, you need a Cloudflare API token that lets the platform d
 npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN
 ```
 
-### 3. Require company login
+### 3. Attach your platform domain
 
-Create one Cloudflare Access policy for the deployed Worker:
+Update `SITE_DOMAIN` in `wrangler.jsonc` to your real domain. Once `SITE_DOMAIN` is set to something other than the default `internal-company.com`, the platform switches to subdomain routing automatically.
 
-1. Go to **Zero Trust** > **Access** > **Applications**
-2. Click **Add an application** > **Self-hosted**
-3. Set the application domain to your Worker URL (e.g. `internal-sites-template.your-subdomain.workers.dev` or your custom domain)
-4. Under **Policies**, create an Allow policy for your company users
-5. Select your company identity provider (Google Workspace, Okta, Azure AD, etc.)
-6. Save
+**a. Update `SITE_DOMAIN` and add routes** in `wrangler.jsonc`:
 
-This makes users sign in before they can use the deploy page or view any deployed site.
+```jsonc
+{
+  "workers_dev": false,
+  "vars": {
+    "SITE_DOMAIN": "yourcompany.com"
+  },
+  "routes": [
+    { "pattern": "yourcompany.com/deploy*", "zone_name": "yourcompany.com" },
+    { "pattern": "*.yourcompany.com/*", "zone_name": "yourcompany.com" }
+  ]
+}
+```
 
-### 4. Attach your platform domain
-
-To use your own domain instead of `*.workers.dev`:
-
-**a. Add DNS records** in your Cloudflare DNS settings:
+**b. Add DNS records** in your Cloudflare DNS settings:
 
 | Type | Name | Content | Proxy |
 |------|------|---------|-------|
 | A | `@` | `192.0.2.1` | Proxied |
 | A | `*` | `192.0.2.1` | Proxied |
 
-**b. Add routes** in `wrangler.jsonc`:
-
-```jsonc
-{
-  "workers_dev": false,
-  "routes": [
-    { "pattern": "internal-company.com/deploy*", "zone_name": "internal-company.com" },
-    { "pattern": "*.internal-company.com/*", "zone_name": "internal-company.com" }
-  ]
-}
-```
-
-**c. Update `SITE_DOMAIN`** to match your domain:
-
-```jsonc
-{
-  "vars": {
-    "SITE_DOMAIN": "internal-company.com"
-  }
-}
-```
-
-**d. Redeploy:**
+**c. Redeploy:**
 
 ```bash
 npx wrangler deploy
 ```
 
-Now employees can deploy from `https://internal-company.com/deploy` and sites will be available at `https://site-name.internal-company.com`.
+### 4. Require company login
+
+Create one Cloudflare Access policy for the deployed Worker:
+
+1. Go to **Zero Trust** > **Access** > **Applications**
+2. Click **Add an application** > **Self-hosted**
+3. Set the application domain to your platform domain (e.g. `yourcompany.com` and `*.yourcompany.com`)
+4. Under **Policies**, create an Allow policy for your company users
+5. Select your company identity provider (Google Workspace, Okta, Azure AD, etc.)
+6. Save
+
+This makes users sign in before they can use the deploy page or view any deployed site.
+
+Now employees can deploy from `https://yourcompany.com/deploy` and sites will be available at `https://site-name.yourcompany.com`.
+
+---
+
+## Routing Modes
+
+The platform auto-detects its routing mode based on the request:
+
+| Mode | When | Site URLs | Auth |
+|------|------|-----------|------|
+| **Testing** | workers.dev, localhost, or `SITE_DOMAIN` is default placeholder | `/sites/slug/` (path-based) | Not required |
+| **Production** | `SITE_DOMAIN` set to real domain + custom domain configured | `slug.yourcompany.com` (subdomain) | Cloudflare Access required |
+
+No manual flags are needed. The routing mode is derived from the request hostname and `SITE_DOMAIN` value.
 
 ---
 
@@ -176,23 +196,14 @@ The uploaded folder or ZIP must include an `index.html` at the root.
 # Install dependencies
 npm install
 
-# For local testing without Cloudflare Access:
-# Set DISABLE_ACCESS_IDENTITY_CHECK=true in wrangler.jsonc vars
-
 # Start local dev server (requires remote bindings)
 npm run dev
 ```
 
-In local/demo mode, site URLs use path-based routing:
+Local dev uses path-based routing automatically (localhost is detected as testing mode):
 
 ```
 http://localhost:8787/sites/site-name/
-```
-
-Production uses wildcard subdomains:
-
-```
-https://site-name.internal-company.com
 ```
 
 ---
@@ -222,7 +233,7 @@ npx wrangler deploy
 
 | Problem | Solution |
 |---------|----------|
-| "Company sign-in is required" | Configure Cloudflare Access for this Worker (see step 3) |
+| "Company sign-in is required" | This appears on a custom domain when Access is not configured. See step 4 above. On workers.dev this should not appear. |
 | "Could not create asset upload session" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is set and has Workers Scripts Edit permission |
 | "Dispatch namespace not found" | Run `npx wrangler dispatch-namespace create internal-sites` |
 | 404 on deployed sites | Ensure uploaded files include `index.html` at the root |

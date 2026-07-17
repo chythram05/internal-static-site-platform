@@ -28,8 +28,7 @@
 	"vars": {
 		"DISPATCH_NAMESPACE_NAME": "internal-sites",
 		"SITE_DOMAIN": "internal-company.com",
-		"DEPLOY_PATH": "/deploy",
-		"DISABLE_ACCESS_IDENTITY_CHECK": "false"
+		"DEPLOY_PATH": "/deploy"
 	},
 	"upload_source_maps": true
 }

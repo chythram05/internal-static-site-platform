@@ -1,9 +1,9 @@
 /**
- * Cloudflare Access identity helpers.
+ * Cloudflare Access identity helpers and routing mode detection.
  *
- * When Cloudflare Access is configured in front of this Worker, every
- * authenticated request includes headers with the user's identity.
- * This module extracts that identity and enforces authentication.
+ * Routing mode is auto-detected from the request hostname and SITE_DOMAIN:
+ *   - workers.dev / localhost / placeholder domain --> testing mode (path-based routing)
+ *   - Real custom domain --> production mode (subdomain routing + Access required)
  */
 
 import type { Env } from "./env";
@@ -16,11 +16,37 @@ export interface AccessIdentity {
 const EMAIL_HEADER = "Cf-Access-Authenticated-User-Email";
 const USER_ID_HEADER = "Cf-Access-Authenticated-User-Id";
 
+const DEFAULT_PLACEHOLDER_DOMAIN = "internal-company.com";
+
+/**
+ * Detect whether the platform is running in testing mode.
+ *
+ * Testing mode is active when:
+ *   - The request hostname ends with `.workers.dev`
+ *   - The request hostname is `localhost` (wrangler dev)
+ *   - SITE_DOMAIN is empty or still the default placeholder
+ *
+ * In testing mode, path-based routing is used (/sites/slug/) and
+ * Access authentication is not required.
+ */
+export function isTestingMode(request: Request, env: Env): boolean {
+	const hostname = new URL(request.url).hostname;
+	const domain = (env.SITE_DOMAIN || "").trim();
+
+	return (
+		hostname.endsWith(".workers.dev") ||
+		hostname === "localhost" ||
+		hostname.startsWith("127.") ||
+		domain === "" ||
+		domain === DEFAULT_PLACEHOLDER_DOMAIN
+	);
+}
+
 /**
  * Extract the Cloudflare Access identity from request headers.
  *
- * Returns `null` if the request has no Access identity and the dev
- * bypass is not enabled.
+ * In testing mode (workers.dev / localhost), returns a placeholder
+ * identity when no Access headers are present.
  */
 export function getAccessIdentity(
 	request: Request,
@@ -33,24 +59,20 @@ export function getAccessIdentity(
 		return { email, userId };
 	}
 
-	// In local development, skip the identity check entirely.
-	if (env.DISABLE_ACCESS_IDENTITY_CHECK === "true") {
-		return { email: "local-dev@example.com" };
+	// In testing mode, allow access with a placeholder identity
+	if (isTestingMode(request, env)) {
+		return { email: "setup@workers.dev" };
 	}
 
 	return null;
 }
 
 /**
- * Require a valid Cloudflare Access identity.
+ * Require a valid identity. Returns the identity or a 401 Response.
  *
- * Returns the identity if present, or a 401 Response if not.
- * Use this at the top of every route handler:
- *
- * ```ts
- * const identity = requireAccessIdentity(c.req.raw, c.env);
- * if (identity instanceof Response) return identity;
- * ```
+ * - If Access headers are present: returns the real identity
+ * - If on workers.dev/localhost: returns a placeholder identity
+ * - If on a custom domain without Access: returns 401
  */
 export function requireAccessIdentity(
 	request: Request,
@@ -64,8 +86,8 @@ export function requireAccessIdentity(
 
 	return new Response(
 		"Company sign-in is required to use this site.\n\n" +
-			"If you have not configured Cloudflare Access yet, see the README\n" +
-			"for instructions on creating an Access application for this Worker.",
+			"Cloudflare Access is not configured for this Worker.\n" +
+			"See the README for instructions on creating an Access application.",
 		{
 			status: 401,
 			headers: { "Content-Type": "text/plain; charset=utf-8" },

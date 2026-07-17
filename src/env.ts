@@ -30,9 +30,6 @@ export interface Env {
 
 	/** Path where the deploy UI is served. Defaults to "/deploy". */
 	DEPLOY_PATH?: string;
-
-	/** Set to "true" only for local development without Cloudflare Access. */
-	DISABLE_ACCESS_IDENTITY_CHECK?: string;
 }
 
 // ── Workers for Platforms types ──────────────────────────────────────────────
