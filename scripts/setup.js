@@ -75,11 +75,16 @@ function ensureDispatchNamespace(namespaceName) {
 		log(green, `  Dispatch namespace '${namespaceName}' created.`);
 		return true;
 	} catch (error) {
-		const output = error.stdout?.toString() || error.stderr?.toString() || "";
+		// Capture both stdout and stderr -- wrangler puts the banner on
+		// stdout and the actual error on stderr.
+		const stdout = error.stdout?.toString() || "";
+		const stderr = error.stderr?.toString() || "";
+		const output = stdout + "\n" + stderr;
 
 		if (
 			output.includes("already exists") ||
-			output.includes("A namespace with this name")
+			output.includes("A namespace with this name") ||
+			output.includes("namespace with that name already exists")
 		) {
 			log(green, `  Dispatch namespace '${namespaceName}' already exists.`);
 			return true;
@@ -97,11 +102,20 @@ function ensureDispatchNamespace(namespaceName) {
 			return false;
 		}
 
-		log(
-			yellow,
-			`  Could not create dispatch namespace: ${output || error.message}`,
-		);
-		log(yellow, "  Continuing -- you can create it manually.");
+		// Log full output for debugging
+		log(yellow, "  Could not create dispatch namespace.");
+		if (stderr.trim()) {
+			log(yellow, `  stderr: ${stderr.trim()}`);
+		}
+		if (stdout.trim()) {
+			log(yellow, `  stdout: ${stdout.trim()}`);
+		}
+		if (!stderr.trim() && !stdout.trim()) {
+			log(yellow, `  error: ${error.message}`);
+		}
+		log(yellow, "");
+		log(yellow, "  You can create it manually:");
+		log(yellow, `    npx wrangler dispatch-namespace create ${namespaceName}`);
 		return false;
 	}
 }
