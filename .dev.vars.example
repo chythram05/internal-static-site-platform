@@ -17,10 +17,3 @@
 #   Scope it to your account only. Do not grant broader permissions.
 #
 DISPATCH_NAMESPACE_API_TOKEN=your-token-here
-
-# ─── Auto-detected ──────────────────────────────────────────────────────────
-#
-# ACCOUNT_ID is auto-detected by the setup script during Deploy to Cloudflare.
-# For local development, set it to your Cloudflare account ID.
-#
-# ACCOUNT_ID=your-account-id-here

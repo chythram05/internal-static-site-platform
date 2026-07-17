@@ -216,27 +216,32 @@ function main() {
 	ensureDispatchNamespace(namespaceName);
 	console.log("");
 
-	// 2. Validate token
-	if (!dispatchToken) {
-		log(yellow, "  DISPATCH_NAMESPACE_API_TOKEN is not set.");
-		log(yellow, "");
-		log(
-			yellow,
-			"  You need an API token to deploy sites into the dispatch namespace.",
-		);
-		log(
-			yellow,
-			"  Create one at: https://dash.cloudflare.com/profile/api-tokens",
-		);
-		log(yellow, "");
-		log(yellow, "  Use 'Create Custom Token' with:");
-		log(yellow, "    Account > Workers Scripts > Edit");
-		log(yellow, "");
-		log(yellow, "  Then set it as a secret:");
-		log(yellow, "    npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN");
-		console.log("");
-	} else {
+	// 2. Check token
+	if (dispatchToken) {
 		log(green, "  DISPATCH_NAMESPACE_API_TOKEN is set.");
+	} else {
+		log(
+			cyan,
+			"  DISPATCH_NAMESPACE_API_TOKEN is not in the build environment.",
+		);
+		log(
+			cyan,
+			"  If you entered it on the Deploy to Cloudflare page, it will be",
+		);
+		log(
+			cyan,
+			"  set as a Worker secret automatically after deployment finishes.",
+		);
+		log(cyan, "");
+		log(
+			cyan,
+			"  If deploying manually, set it with:",
+		);
+		log(
+			cyan,
+			"    npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN",
+		);
+		console.log("");
 	}
 
 	// 3. Write .dev.vars (used by wrangler for secrets)
