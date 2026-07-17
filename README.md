@@ -1,20 +1,6 @@
 # Internal Sites Platform
 
-Give your company a simple place to deploy internal static sites.
-
-Employees go to:
-
-```
-https://internal-company.com/deploy
-```
-
-They upload a folder or ZIP and get a URL like:
-
-```
-https://my-site.internal-company.com
-```
-
-Every site requires company login via Cloudflare Access.
+Deploy an internal drag-and-drop static site platform for your company using [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/). Employees upload files and get a live URL -- every site is protected behind [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/).
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/chythram05/internal-static-site-platform)
 
@@ -22,51 +8,24 @@ Every site requires company login via Cloudflare Access.
 
 ## Features
 
-- **Drag & drop deploy** -- Upload a folder or ZIP file from the browser and get a live URL instantly
-- **Works on workers.dev** -- Test immediately after deploy. Path-based routing works out of the box on `*.workers.dev`
-- **Protected by default** -- Once configured, every site sits behind Cloudflare Access. Employees must sign in with your company identity provider
-- **Subdomain routing** -- In production, each site gets its own subdomain: `site-name.internal-company.com`
-- **Deployment history** -- Tracks who deployed what and when, stored in D1
-- **Admin dashboard** -- View all sites, deployments, and dispatch namespace scripts at `/admin`
-- **Re-deploy in place** -- Upload to the same slug to update an existing site. Only the owner can overwrite
-- **No build step** -- Static files only. Upload HTML/CSS/JS/images and they are live immediately
+- **Drag & drop deploy** - Upload a folder or ZIP file and get a live URL instantly
+- **Protected by Access** - Every site sits behind Cloudflare Access. Employees sign in with your company identity provider
+- **Subdomain routing** - Each site gets its own subdomain: `site-name.yourcompany.com`
+- **Works on workers.dev** - Test immediately after deploy, no custom domain required
+- **Admin dashboard** - View all sites, deployments, and dispatch namespace scripts at `/admin`
+- **Deployment tracking** - Tracks who deployed what and when, stored in D1
+- **Re-deploy in place** - Upload to the same slug to update. Only the owner can overwrite
 
 ## How It Works
 
-This template uses three Cloudflare products together:
-
-1. **Workers for Platforms** -- Each deployed site becomes an isolated Worker in a dispatch namespace. The platform Worker routes requests to the correct site Worker
-2. **D1** -- Stores site metadata (name, slug, owner, timestamps) and deployment history
-3. **Cloudflare Access** -- Enforces company login on every request. The platform reads the `Cf-Access-Authenticated-User-Email` header to identify who is deploying
-
-## Architecture
-
-```
-Request
-  |
-  v
-Cloudflare Access (company login required)
-  |
-  v
-Platform Worker (this template)
-  |
-  ├── /deploy           -> Drag & drop deploy UI
-  ├── /admin            -> Admin dashboard
-  ├── /api/sites/deploy -> Deploy API (uploads files to dispatch namespace)
-  |
-  └── *.internal-company.com
-        |
-        v
-      Dispatch Namespace (Workers for Platforms)
-        ├── docs.internal-company.com   -> docs Worker
-        ├── handbook.internal-company.com -> handbook Worker
-        └── ...
-```
+1. **Workers for Platforms** - Each deployed site becomes an isolated Worker in a dispatch namespace. The platform routes requests to the correct site Worker
+2. **D1** - Stores site metadata (name, slug, owner, timestamps) and deployment history
+3. **Cloudflare Access** - Enforces company login. The platform reads the `Cf-Access-Authenticated-User-Email` header to identify deployers
 
 ## Bindings Used
 
-- **dispatcher** (Workers for Platforms) -- Routes requests to deployed site Workers
-- **DB** (D1) -- Stores site metadata and deployment history
+- **dispatcher** (Workers for Platforms) - Routes requests to deployed site Workers
+- **DB** (D1) - Stores site metadata and deployment history
 
 <!-- dash-content-end -->
 
@@ -74,53 +33,38 @@ Platform Worker (this template)
 
 ## Quick Start
 
-After clicking **Deploy to Cloudflare**, the platform works immediately on workers.dev:
+Click the **Deploy to Cloudflare** button above. The platform works immediately on workers.dev:
 
 1. Open `https://your-worker.your-subdomain.workers.dev/deploy`
 2. Upload a folder or ZIP containing an `index.html`
 3. Click **Deploy site**
-4. The generated URL uses path-based routing: `https://your-worker.workers.dev/sites/slug/`
+4. Open the generated URL: `https://your-worker.workers.dev/sites/slug/`
 
-This is testing mode. For production, follow the full setup below to get subdomain routing and Access protection.
+For production, follow the setup below to add your domain and Cloudflare Access.
 
 ---
 
-## Set Up
+## Production Setup
 
-### 1. Deploy this app
+### 1. Create your API token
 
-Click the **Deploy to Cloudflare** button above.
+The platform needs an API token to deploy Workers into the dispatch namespace.
 
-During setup you will be prompted for:
-
-| Secret / Variable | Description |
-|---|---|
-| `DISPATCH_NAMESPACE_API_TOKEN` | API token with **Workers Scripts Edit** permission. [Create a Custom Token](https://dash.cloudflare.com/profile/api-tokens) with `Account > Workers Scripts > Edit` scoped to your account. |
-| `SITE_DOMAIN` | Your company's internal domain, e.g. `internal-company.com` |
-
-The deploy flow will automatically provision the D1 database and dispatch namespace.
-
-### 2. Create your API token
-
-Before deploying sites, you need a Cloudflare API token that lets the platform deploy Workers into the dispatch namespace.
-
-1. Go to [https://dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Click **Create Token**
-3. Select **Create Custom Token**
-4. Set permissions: **Account** > **Workers Scripts** > **Edit**
-5. Scope it to your account only
-6. Click **Continue to summary** > **Create Token**
-7. Copy the token and set it as a secret:
+1. Go to [**API Tokens**](https://dash.cloudflare.com/profile/api-tokens)
+2. Click **Create Token** > **Create Custom Token**
+3. Set permissions: **Account** > **Workers Scripts** > **Edit**
+4. Scope it to your account only
+5. Copy the token and set it as a secret:
 
 ```bash
 npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN
 ```
 
-### 3. Attach your platform domain
+### 2. Attach your domain
 
-Update `SITE_DOMAIN` in `wrangler.jsonc` to your real domain. Once `SITE_DOMAIN` is set to something other than the default `internal-company.com`, the platform switches to subdomain routing automatically.
+Update `SITE_DOMAIN` in `wrangler.jsonc` to your domain. The platform switches to subdomain routing automatically.
 
-**a. Update `SITE_DOMAIN` and add routes** in `wrangler.jsonc`:
+**a. Update config** in `wrangler.jsonc`:
 
 ```jsonc
 {
@@ -129,7 +73,7 @@ Update `SITE_DOMAIN` in `wrangler.jsonc` to your real domain. Once `SITE_DOMAIN`
     "SITE_DOMAIN": "yourcompany.com"
   },
   "routes": [
-    { "pattern": "yourcompany.com/deploy*", "zone_name": "yourcompany.com" },
+    { "pattern": "yourcompany.com/*", "zone_name": "yourcompany.com" },
     { "pattern": "*.yourcompany.com/*", "zone_name": "yourcompany.com" }
   ]
 }
@@ -137,10 +81,10 @@ Update `SITE_DOMAIN` in `wrangler.jsonc` to your real domain. Once `SITE_DOMAIN`
 
 **b. Add DNS records** in your Cloudflare DNS settings:
 
-| Type | Name | Content | Proxy |
-|------|------|---------|-------|
-| A | `@` | `192.0.2.1` | Proxied |
-| A | `*` | `192.0.2.1` | Proxied |
+| Type | Name | Content     | Proxy   |
+|------|------|-------------|---------|
+| A    | `@`  | `192.0.2.1` | Proxied |
+| A    | `*`  | `192.0.2.1` | Proxied |
 
 **c. Redeploy:**
 
@@ -148,83 +92,74 @@ Update `SITE_DOMAIN` in `wrangler.jsonc` to your real domain. Once `SITE_DOMAIN`
 npx wrangler deploy
 ```
 
-### 4. Require company login
+### 3. Require company login
 
-Create one Cloudflare Access policy for the deployed Worker:
+Create a Cloudflare Access policy so employees must sign in.
 
-1. Go to [**Zero Trust > Access > Applications**](https://dash.cloudflare.com/?to=/:account/one/access-controls/apps)
-2. Click **Add an application** > **Self-hosted**
-3. Set the application domain to your platform domain (e.g. `yourcompany.com` and `*.yourcompany.com`)
-4. Under **Policies**, create an Allow policy for your company users
-5. Select your company identity provider (Google Workspace, Okta, Azure AD, etc.)
-6. Save
+1. Go to [**Zero Trust > Access controls > Applications**](https://dash.cloudflare.com/?to=/:account/one/access-controls/apps)
+2. Click **Create new application** > **Continue with self-hosted and private**
+3. Under **Destinations > Public hostnames**, configure the domain:
 
-This makes users sign in before they can use the deploy page or view any deployed site.
+   **If using workers.dev (no custom domain):**
+   - **Subdomain**: your Worker name (e.g. `internal-sites-template`)
+   - **Domain**: select your `*.workers.dev` subdomain from the dropdown
 
-Now employees can deploy from `https://yourcompany.com/deploy` and sites will be available at `https://site-name.yourcompany.com`.
+   **If using a custom domain:**
+   - **Domain**: select `yourcompany.com` from the dropdown
+   - Click **+ Add public hostname** and add `*.yourcompany.com` to protect deployed sites on subdomains
 
----
+4. Scroll down to **Access policies** and click **Add a policy**
+5. Name the policy (e.g. "Allow company employees")
+6. Set the action to **Allow**
+7. Add a rule to match your company users:
+   - **Selector**: `Emails ending in` -> `@yourcompany.com`
+   - Or select your identity provider (Google Workspace, Okta, Azure AD, etc.)
+8. Save the policy, then save the application
 
-## Routing Modes
-
-The platform auto-detects its routing mode based on the request:
-
-| Mode | When | Site URLs | Auth |
-|------|------|-----------|------|
-| **Testing** | workers.dev, localhost, or `SITE_DOMAIN` is default placeholder | `/sites/slug/` (path-based) | Not required |
-| **Production** | `SITE_DOMAIN` set to real domain + custom domain configured | `slug.yourcompany.com` (subdomain) | Cloudflare Access required |
-
-No manual flags are needed. The routing mode is derived from the request hostname and `SITE_DOMAIN` value.
+Every request now requires company login. The platform reads the Access identity header to track who deployed each site.
 
 ---
 
-## Use
+## Architecture
 
-1. Open `/deploy`
-2. Enter a site name
-3. Upload a folder or ZIP
-4. Click **Deploy site**
-5. Open or copy the generated URL
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Platform Worker (this template)                            │
+├─────────────────────────────────────────────────────────────┤
+│  yourcompany.com/deploy    → Drag & drop deploy UI          │
+│  yourcompany.com/admin     → Admin dashboard                │
+├─────────────────────────────────────────────────────────────┤
+│  Deployed Sites (Workers for Platforms)                     │
+│  ├── docs.yourcompany.com      → Employee's site            │
+│  ├── handbook.yourcompany.com  → Employee's site            │
+│  └── ...                                                    │
+├─────────────────────────────────────────────────────────────┤
+│  Cloudflare Access                                          │
+│  └── All routes require company identity provider login     │
+└─────────────────────────────────────────────────────────────┘
+```
 
-The uploaded folder or ZIP must include an `index.html` at the root.
+On workers.dev (testing mode), sites use path-based routing instead:
+
+```
+your-worker.workers.dev/deploy          → Deploy UI
+your-worker.workers.dev/sites/docs/     → Deployed site
+your-worker.workers.dev/admin           → Admin dashboard
+```
 
 ---
 
 ## Local Development
 
 ```bash
-# Install dependencies
 npm install
-
-# Start local dev server (requires remote bindings)
 npm run dev
 ```
 
-Local dev uses path-based routing automatically (localhost is detected as testing mode):
+Local dev uses path-based routing automatically:
 
 ```
 http://localhost:8787/sites/site-name/
-```
-
----
-
-## Manual Deploy (without Deploy to Cloudflare button)
-
-```bash
-npm install
-
-# Create the dispatch namespace
-npx wrangler dispatch-namespace create internal-sites
-
-# Create the D1 database
-npx wrangler d1 create internal-sites-platform
-# Update the database_id in wrangler.jsonc with the returned ID
-
-# Set your API token as a secret
-npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN
-
-# Deploy
-npx wrangler deploy
 ```
 
 ---
@@ -233,11 +168,10 @@ npx wrangler deploy
 
 | Problem | Solution |
 |---------|----------|
-| "Company sign-in is required" | This appears on a custom domain when Access is not configured. See step 4 above. On workers.dev this should not appear. |
-| "Could not create asset upload session" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is set and has Workers Scripts Edit permission |
-| "Dispatch namespace not found" | Run `npx wrangler dispatch-namespace create internal-sites` |
+| "Company sign-in is required" | Access is not configured. See step 3 above. On workers.dev this should not appear |
+| "Could not create asset upload session" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is set with Workers Scripts Edit permission |
+| "Dispatch namespace not found" | Enable [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) and run `npx wrangler dispatch-namespace create internal-sites` |
 | 404 on deployed sites | Ensure uploaded files include `index.html` at the root |
-| "Site slug is already owned by another user" | Each slug is owned by the first person who deploys it |
 | Database errors | Visit `/admin` to check status. Tables auto-create on first request |
 
 **View logs:**
@@ -245,6 +179,13 @@ npx wrangler deploy
 ```bash
 npx wrangler tail
 ```
+
+---
+
+## Prerequisites
+
+- **Cloudflare Account** with [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) enabled
+- **Node.js 18+**
 
 ---
 
