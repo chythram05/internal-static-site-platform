@@ -92,7 +92,7 @@ Every request now requires company login. The platform reads the Access identity
 
 ---
 
-## Custom Domain Setup (Optional)
+## Attach your platform domain
 
 Update `SITE_DOMAIN` in `wrangler.jsonc` to your domain. The platform switches to subdomain routing automatically.
 
