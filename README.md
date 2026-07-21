@@ -33,12 +33,24 @@ Deploy an internal drag-and-drop static site platform for your company using [Wo
 
 ## Quick Start
 
-Click the **Deploy to Cloudflare** button above. The platform works immediately on workers.dev:
+Click the **Deploy to Cloudflare** button above, then follow these steps to get your Worker URL.
 
-1. Open `https://your-worker.your-subdomain.workers.dev/deploy`
-2. Upload a folder or ZIP containing an `index.html`
-3. Click **Deploy site**
-4. Open the generated URL: `https://your-worker.workers.dev/sites/slug/`
+### 1. Enable your Worker URL in the dashboard
+
+After deployment completes:
+
+1. Go to [**Workers & Pages**](https://dash.cloudflare.com/?to=/:account/workers-and-pages) in the Cloudflare dashboard
+2. Click on your newly deployed Worker (named `internal-sites-template` by default)
+3. Go to **Settings** > **Domains & Routes**
+4. Under **Worker URL**, click **Enable** and confirm — this enables your `workers.dev` URL
+5. Go back to the **Overview** tab
+6. Click the `workers.dev` link shown at the top of the page to open the platform
+
+### 2. Deploy your first site
+
+1. Upload a folder or ZIP containing an `index.html`
+2. Click **Deploy site**
+3. Open the generated URL shown after deployment
 
 For production, follow the setup below to add your domain and Cloudflare Access.
 
