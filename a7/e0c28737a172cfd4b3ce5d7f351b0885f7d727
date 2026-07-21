@@ -1,0 +1,19 @@
+README.md
+  s_bf57874b50c6cd::t_bfa269454f529e 36,38-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a7e0c28737a172cfd4b3ce5d7f351b0885f7d727",
+  "prompts": {},
+  "sessions": {
+    "s_bf57874b50c6cd": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07abce33affeA85W9NCdQ7NXXs",
+        "model": "gpt-5.6"
+      },
+      "human_author": "chythra-w1 <chythra-w1@users.noreply.github.com>"
+    }
+  }
+}
