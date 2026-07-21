@@ -12,6 +12,9 @@
 		"products": ["Workers", "Workers for Platforms", "D1"],
 		"categories": ["starter"],
 		"bindings": {
+			"ACCOUNT_ID": {
+				"description": "The Account ID for the Cloudflare account you are deploying to. [Open Account Home](https://dash.cloudflare.com/) and select **Copy Account ID** from the menu beside your account name."
+			},
 			"DISPATCH_NAMESPACE_API_TOKEN": {
 				"description": "API token with **Workers Scripts Edit** permission. [Create a Custom Token](https://dash.cloudflare.com/profile/api-tokens) with `Account > Workers Scripts > Edit` scoped to your account."
 			},

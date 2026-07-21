@@ -31,32 +31,7 @@ Deploy an internal drag-and-drop static site platform for your company using [Wo
 
 ---
 
-## Quick Start
-
-Click the **Deploy to Cloudflare** button above, then follow these steps to get your Worker URL.
-
-### 1. Enable your Worker URL in the dashboard
-
-After deployment completes:
-
-1. Go to [**Workers & Pages**](https://dash.cloudflare.com/?to=/:account/workers-and-pages) in the Cloudflare dashboard
-2. Click on your newly deployed Worker (named `internal-sites-template` by default)
-3. Go to **Settings** > **Domains & Routes**
-4. Under **Worker URL**, click **Enable** and confirm — this enables your `workers.dev` URL
-5. Go back to the **Overview** tab
-6. Click the `workers.dev` link shown at the top of the page to open the platform
-
-### 2. Deploy your first site
-
-1. Upload a folder or ZIP containing an `index.html`
-2. Click **Deploy site**
-3. Open the generated URL shown after deployment
-
-For production, follow the setup below to add your domain and Cloudflare Access.
-
----
-
-## Production Setup
+## Setup
 
 ### 1. Create your API token
 
@@ -66,13 +41,58 @@ The platform needs an API token to deploy Workers into the dispatch namespace.
 2. Click **Create Token** > **Create Custom Token**
 3. Set permissions: **Account** > **Workers Scripts** > **Edit**
 4. Scope it to your account only
-5. Copy the token and set it as a secret:
+5. Copy the token — you will enter it when prompted during the Deploy to Cloudflare flow
 
-```bash
-npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN
-```
+### 2. Deploy the template
 
-### 2. Attach your domain
+Click the **Deploy to Cloudflare** button above and follow the prompts. Paste your API token when asked for `DISPATCH_NAMESPACE_API_TOKEN`.
+
+### 3. Enable your Worker URL
+
+After deployment completes:
+
+1. Go to [**Workers & Pages**](https://dash.cloudflare.com/?to=/:account/workers-and-pages) in the Cloudflare dashboard
+2. Click on your newly deployed Worker (named `internal-sites-template` by default)
+3. Go to **Settings** > **Domains & Routes**
+4. Under **Worker URL**, click **Enable** and confirm — this enables your `workers.dev` URL
+
+### 4. Require company login
+
+Create a Cloudflare Access policy so employees must sign in.
+
+1. Go to [**Zero Trust > Access controls > Applications**](https://dash.cloudflare.com/?to=/:account/one/access-controls/apps)
+2. Click **Create new application** > **Continue with self-hosted and private**
+3. Under **Destinations > Public hostnames**, configure the domain:
+
+   **If using workers.dev (no custom domain):**
+   - **Subdomain**: your Worker name (e.g. `internal-sites-template`)
+   - **Domain**: select your `*.workers.dev` subdomain from the dropdown
+
+   **If using a custom domain:**
+   - **Domain**: select `yourcompany.com` from the dropdown
+   - Click **+ Add public hostname** and add `*.yourcompany.com` to protect deployed sites on subdomains
+
+4. Scroll down to **Access policies** and click **Add a policy**
+5. Name the policy (e.g. "Allow company employees")
+6. Set the action to **Allow**
+7. Add a rule to match your company users:
+   - **Selector**: `Emails ending in` -> `@yourcompany.com`
+   - Or select your identity provider (Google Workspace, Okta, Azure AD, etc.)
+8. Save the policy, then save the application
+
+Every request now requires company login. The platform reads the Access identity header to track who deployed each site.
+
+### 5. Deploy your first site
+
+1. Go back to [**Workers & Pages**](https://dash.cloudflare.com/?to=/:account/workers-and-pages) and select your Worker
+2. On the **Overview** tab, click the `workers.dev` link to open the platform
+3. Upload a folder or ZIP containing an `index.html`
+4. Click **Deploy site**
+5. Open the generated URL shown after deployment
+
+---
+
+## Custom Domain Setup (Optional)
 
 Update `SITE_DOMAIN` in `wrangler.jsonc` to your domain. The platform switches to subdomain routing automatically.
 
@@ -103,32 +123,6 @@ Update `SITE_DOMAIN` in `wrangler.jsonc` to your domain. The platform switches t
 ```bash
 npx wrangler deploy
 ```
-
-### 3. Require company login
-
-Create a Cloudflare Access policy so employees must sign in.
-
-1. Go to [**Zero Trust > Access controls > Applications**](https://dash.cloudflare.com/?to=/:account/one/access-controls/apps)
-2. Click **Create new application** > **Continue with self-hosted and private**
-3. Under **Destinations > Public hostnames**, configure the domain:
-
-   **If using workers.dev (no custom domain):**
-   - **Subdomain**: your Worker name (e.g. `internal-sites-template`)
-   - **Domain**: select your `*.workers.dev` subdomain from the dropdown
-
-   **If using a custom domain:**
-   - **Domain**: select `yourcompany.com` from the dropdown
-   - Click **+ Add public hostname** and add `*.yourcompany.com` to protect deployed sites on subdomains
-
-4. Scroll down to **Access policies** and click **Add a policy**
-5. Name the policy (e.g. "Allow company employees")
-6. Set the action to **Allow**
-7. Add a rule to match your company users:
-   - **Selector**: `Emails ending in` -> `@yourcompany.com`
-   - Or select your identity provider (Google Workspace, Okta, Azure AD, etc.)
-8. Save the policy, then save the application
-
-Every request now requires company login. The platform reads the Access identity header to track who deployed each site.
 
 ---
 
@@ -180,7 +174,7 @@ http://localhost:8787/sites/site-name/
 
 | Problem | Solution |
 |---------|----------|
-| "Company sign-in is required" | Access is not configured. See step 3 above. On workers.dev this should not appear |
+| "Company sign-in is required" | Access is not configured. See **Require company login** in the Setup section above |
 | "Could not create asset upload session" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is set with Workers Scripts Edit permission |
 | "Dispatch namespace not found" | Enable [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) and run `npx wrangler dispatch-namespace create internal-sites` |
 | 404 on deployed sites | Ensure uploaded files include `index.html` at the root |
