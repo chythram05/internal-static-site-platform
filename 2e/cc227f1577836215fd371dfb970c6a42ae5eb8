@@ -1,0 +1,19 @@
+README.md
+  s_bf57874b50c6cd::t_d9b320ad6bbfe1 34,36-44,46-50,59,61,63-65,67-69,71-73,75-81,83,85,87-93,95,177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2ecc227f1577836215fd371dfb970c6a42ae5eb8",
+  "prompts": {},
+  "sessions": {
+    "s_bf57874b50c6cd": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07abce33affeA85W9NCdQ7NXXs",
+        "model": "gpt-5.6"
+      },
+      "human_author": "chythra-w1 <chythra-w1@users.noreply.github.com>"
+    }
+  }
+}
